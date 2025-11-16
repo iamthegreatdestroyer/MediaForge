@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: mediaforge-app
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./data:/app/data
+      - ./media_library:/media_library
+      - ./cache:/app/cache
+    ports:
+      - "8000:8000"  # FastAPI web interface
+      - "8001:8001"  # WebSocket for real-time updates
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MEDIAFORGE_ENV=development
+      - DATABASE_URL=sqlite:///data/mediaforge.db
+      - MEDIA_ROOT=/media_library
+      - CACHE_DIR=/app/cache
+    command: python -m src.cli.main
+    restart: unless-stopped
+    networks:
+      - mediaforge-network
+
+  # Optional: Separate web service for production
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: mediaforge-web
+    profiles:
+      - production
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./media_library:/media_library:ro
+      - ./cache:/app/cache
+    ports:
+      - "8080:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MEDIAFORGE_ENV=production
+      - DATABASE_URL=sqlite:///data/mediaforge.db
+      - MEDIA_ROOT=/media_library
+      - CACHE_DIR=/app/cache
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+    restart: unless-stopped
+    depends_on:
+      - app
+    networks:
+      - mediaforge-network
+
+networks:
+  mediaforge-network:
+    driver: bridge
+
+volumes:
+  data:
+  media_library:
+  cache:
