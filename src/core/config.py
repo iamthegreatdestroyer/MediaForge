@@ -1,12 +1,12 @@
 """Configuration management for MediaForge"""
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
-    
+
     # Application
     mediaforge_env: str = "development"
     debug: bool = True
@@ -39,9 +39,8 @@ class Settings(BaseSettings):
     compression_level: int = 3
     compression_threads: int = 2
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    # Pydantic v2-style settings configuration
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
 
 # Global settings instance
