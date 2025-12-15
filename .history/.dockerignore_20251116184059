@@ -1,0 +1,63 @@
+# Docker build context exclusions for MediaForge
+# Keep image lean and builds fast.
+
+# VCS
+.git
+.gitignore
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+.wheels/
+
+# Virtual environments
+venv/
+.env/
+ENV/
+.env.*
+.venv/
+
+# Allow example env file
+!/.env.example
+
+# Local data & runtime/generated directories (mounted or recreated at runtime)
+data/
+media_library/
+cache/
+thumbnails/
+temp/
+
+# Logs & coverage
+*.log
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Tooling / local configs
+.idea/
+.vscode/
+
+# Documentation build outputs
+docs/_build/
+site/
+
+# Node / frontend (future) artifacts
+node_modules/
+
+# Misc OS/editor files
+.DS_Store
+*~
+*.swp
+*.swo
+
+# Large prompt/instructions (optional to exclude if not needed in image)
+# prompts/
+
+# Keep tests (needed for CI inside container). Comment out to exclude.
+# tests/
