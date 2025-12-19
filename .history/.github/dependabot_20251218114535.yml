@@ -1,0 +1,129 @@
+# Dependabot Configuration for MediaForge
+# Automated dependency updates for security and maintenance
+
+version: 2
+
+registries:
+  # Add private registry configurations here if needed
+  # python-pypi:
+  #   type: python-index
+  #   url: https://pypi.example.com/simple
+  #   username: ${{ secrets.PYPI_USERNAME }}
+  #   password: ${{ secrets.PYPI_PASSWORD }}
+
+updates:
+  # ============================================
+  # Python Dependencies (pip)
+  # ============================================
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "sgbil"
+    labels:
+      - "dependencies"
+      - "python"
+      - "automated"
+    commit-message:
+      prefix: "deps(python)"
+      include: "scope"
+    groups:
+      # Group minor/patch updates to reduce PR noise
+      python-minor-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+        exclude-patterns:
+          - "sqlalchemy*"
+          - "fastapi*"
+          - "pydantic*"
+      # Keep major framework updates separate for careful review
+      python-frameworks:
+        patterns:
+          - "sqlalchemy*"
+          - "fastapi*"
+          - "pydantic*"
+        update-types:
+          - "major"
+          - "minor"
+      # Group dev dependencies
+      python-dev:
+        patterns:
+          - "pytest*"
+          - "black"
+          - "flake8*"
+          - "mypy"
+          - "coverage"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Ignore specific versions if needed
+      # - dependency-name: "example-package"
+      #   versions: ["4.x", "5.x"]
+    versioning-strategy: "increase-if-necessary"
+
+  # ============================================
+  # GitHub Actions
+  # ============================================
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "sgbil"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "ci(actions)"
+      include: "scope"
+    groups:
+      # Group all GitHub Actions updates
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+
+  # ============================================
+  # Docker Dependencies
+  # ============================================
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "sgbil"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "deps(docker)"
+      include: "scope"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

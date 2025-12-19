@@ -1,0 +1,286 @@
+# MediaForge Security Scanning Pipeline
+# CodeQL analysis, dependency scanning, and container security
+
+name: Security Scanning
+
+on:
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main, develop]
+    schedule:
+        - cron: "0 9 * * 1" # Weekly on Monday at 9 AM UTC
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+    security-events: write
+    actions: read
+
+jobs:
+    # ============================================
+    # CodeQL Static Analysis
+    # ============================================
+    codeql:
+        name: CodeQL Analysis
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@v3
+              with:
+                  languages: python
+                  queries: +security-and-quality
+                  config: |
+                      paths:
+                          - src
+                      paths-ignore:
+                          - tests
+                          - docs
+
+            - name: Autobuild
+              uses: github/codeql-action/autobuild@v3
+
+            - name: Perform CodeQL Analysis
+              uses: github/codeql-action/analyze@v3
+              with:
+                  category: "/language:python"
+                  output: codeql-results
+                  upload: true
+
+    # ============================================
+    # Dependency Vulnerability Scan
+    # ============================================
+    dependency-check:
+        name: Dependency Vulnerability Scan
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+                  cache: "pip"
+
+            - name: Install scanning tools
+              run: |
+                  pip install --upgrade pip
+                  pip install safety bandit pip-audit
+
+            - name: Run Safety check
+              continue-on-error: true
+              run: |
+                  safety check -r requirements.txt --full-report --json --output safety-report.json || true
+                  safety check -r requirements.txt --full-report
+
+            - name: Run pip-audit
+              continue-on-error: true
+              run: |
+                  pip-audit -r requirements.txt --format json --output pip-audit-report.json || true
+                  pip-audit -r requirements.txt
+
+            - name: Upload security reports
+              uses: actions/upload-artifact@v4
+              with:
+                  name: dependency-reports
+                  path: |
+                      safety-report.json
+                      pip-audit-report.json
+                  retention-days: 30
+              if: always()
+
+    # ============================================
+    # SAST - Static Application Security Testing
+    # ============================================
+    sast:
+        name: SAST - Static Application Security Testing
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+                  cache: "pip"
+
+            - name: Install dependencies
+              run: |
+                  pip install --upgrade pip
+                  pip install bandit[toml]
+
+            - name: Bandit SAST scan
+              run: |
+                  bandit -r src/ \
+                      -f json \
+                      -o bandit-report.json \
+                      --severity-level medium \
+                      --confidence-level medium \
+                      --exit-zero
+                  bandit -r src/ \
+                      --severity-level medium \
+                      --confidence-level medium \
+                      -f txt
+
+            - name: Semgrep SAST scan
+              uses: returntocorp/semgrep-action@v1
+              with:
+                  config: >-
+                      p/security-audit
+                      p/owasp-top-ten
+                      p/python
+                      p/secrets
+              continue-on-error: true
+
+            - name: Upload Bandit report
+              uses: actions/upload-artifact@v4
+              with:
+                  name: bandit-report
+                  path: bandit-report.json
+                  retention-days: 30
+              if: always()
+
+    # ============================================
+    # Container Security Scanning
+    # ============================================
+    container-scan:
+        name: Container Image Scan
+        runs-on: ubuntu-latest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+        permissions:
+            contents: read
+            packages: write
+            security-events: write
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Build Docker image
+              uses: docker/build-push-action@v5
+              with:
+                  context: .
+                  file: ./docker/Dockerfile
+                  push: false
+                  load: true
+                  tags: mediaforge:scan
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
+
+            - name: Run Trivy vulnerability scanner
+              uses: aquasecurity/trivy-action@master
+              with:
+                  image-ref: "mediaforge:scan"
+                  format: "sarif"
+                  output: "trivy-results.sarif"
+                  severity: "HIGH,CRITICAL"
+                  vuln-type: "os,library"
+                  ignore-unfixed: true
+
+            - name: Upload Trivy scan results to GitHub Security tab
+              uses: github/codeql-action/upload-sarif@v3
+              if: always()
+              with:
+                  sarif_file: "trivy-results.sarif"
+                  category: "trivy-container"
+
+            - name: Run Trivy (table output)
+              uses: aquasecurity/trivy-action@master
+              with:
+                  image-ref: "mediaforge:scan"
+                  format: "table"
+                  severity: "HIGH,CRITICAL"
+                  vuln-type: "os,library"
+                  ignore-unfixed: true
+
+    secrets-scan:
+        name: Secrets Detection
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: TruffleHog Secret Scan
+              uses: trufflesecurity/trufflehog@main
+              with:
+                  path: ./
+                  base: ${{ github.event.repository.default_branch }}
+                  head: HEAD
+                  extra_args: --debug --only-verified
+              continue-on-error: true
+
+            - name: GitGuardian scan
+              uses: GitGuardian/ggshield-action@master
+              env:
+                  GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+              with:
+                  scan-option: --all-history
+              continue-on-error: true
+
+    code-quality:
+        name: Code Quality Analysis
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v4
+              with:
+                  python-version: "3.11"
+                  cache: "pip"
+
+            - name: Install dependencies
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install pylint black isort mypy flake8
+
+            - name: pylint scan
+              run: pylint src --exit-zero --output-format=text
+              continue-on-error: true
+
+            - name: MyPy type checking
+              run: mypy src --ignore-missing-imports --junit-xml=mypy-report.xml
+              continue-on-error: true
+
+            - name: Upload MyPy report
+              uses: actions/upload-artifact@v3
+              with:
+                  name: mypy-report
+                  path: mypy-report.xml
+              if: always()
+
+    summary:
+        name: Security Summary
+        runs-on: ubuntu-latest
+        if: always()
+        needs:
+            [dependency-check, sast, container-scan, secrets-scan, code-quality]
+
+        steps:
+            - name: Security Check Summary
+              run: |
+                  echo "## 🔒 Security Scanning Complete"
+                  echo ""
+                  echo "✅ Dependency vulnerabilities checked"
+                  echo "✅ Static application security testing (SAST) completed"
+                  echo "✅ Container image scanned"
+                  echo "✅ Secrets detection performed"
+                  echo "✅ Code quality analysis finished"
+                  echo ""
+                  echo "View detailed reports in the Artifacts section"

@@ -1,0 +1,46 @@
+# MediaForge Code Owners
+# These owners will be automatically requested for review on PRs
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ============================================
+# Default Owners (all files)
+# ============================================
+*                       @sgbil
+
+# ============================================
+# Core Application
+# ============================================
+/src/                   @sgbil
+/src/api/               @sgbil
+/src/cli/               @sgbil
+/src/core/              @sgbil
+/src/models/            @sgbil
+/src/repositories/      @sgbil
+
+# ============================================
+# Configuration & Infrastructure
+# ============================================
+/docker/                @sgbil
+docker-compose.yml      @sgbil
+pyproject.toml          @sgbil
+requirements.txt        @sgbil
+alembic.ini             @sgbil
+/alembic/               @sgbil
+
+# ============================================
+# CI/CD & Automation
+# ============================================
+/.github/               @sgbil
+/.github/workflows/     @sgbil
+
+# ============================================
+# Tests
+# ============================================
+/tests/                 @sgbil
+conftest.py             @sgbil
+
+# ============================================
+# Documentation
+# ============================================
+/docs/                  @sgbil
+*.md                    @sgbil
